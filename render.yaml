@@ -38,15 +38,15 @@ services:
 
   - type: web
     name: estateiq-frontend
-    runtime: docker
-    dockerfilePath: ./frontend/Dockerfile
-    dockerContext: ./frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     plan: free
-    buildArgs:
-      - key: NEXT_PUBLIC_API_URL
-        value: https://estateiq-backend-ji7y.onrender.com
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://estateiq-backend-ji7y.onrender.com
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: "3000"
