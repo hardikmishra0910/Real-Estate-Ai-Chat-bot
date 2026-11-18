@@ -1,5 +1,4 @@
 services:
-  # ── Backend ───────────────────────────────────────────────────────────────
   - type: web
     name: estateiq-backend
     runtime: docker
@@ -8,7 +7,7 @@ services:
     plan: free
     envVars:
       - key: OPENROUTER_API_KEY
-        sync: false          # set manually in Render dashboard
+        sync: false
       - key: OPENROUTER_MODEL
         value: google/gemma-3-4b-it
       - key: OPENROUTER_BASE_URL
@@ -18,7 +17,7 @@ services:
       - key: CHROMA_PERSIST_DIR
         value: /app/data/chromadb
       - key: FRONTEND_URL
-        value: https://estateiq-frontend.onrender.com   # update after deploy
+        value: https://estateiq-frontend.onrender.com
       - key: EMBEDDING_MODEL
         value: all-MiniLM-L6-v2
       - key: TOP_K_RESULTS
@@ -37,7 +36,6 @@ services:
       sizeGB: 1
     healthCheckPath: /health
 
-  # ── Frontend ──────────────────────────────────────────────────────────────
   - type: web
     name: estateiq-frontend
     runtime: docker
@@ -46,7 +44,7 @@ services:
     plan: free
     buildArgs:
       - key: NEXT_PUBLIC_API_URL
-        value: https://estateiq-backend.onrender.com   # update after backend deploys
+        value: https://estateiq-backend.onrender.com
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://estateiq-backend.onrender.com
