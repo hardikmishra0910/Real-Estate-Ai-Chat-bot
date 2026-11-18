@@ -3,9 +3,10 @@
 > AI-powered chatbot grounded in publicly collected DarGlobal and Wasalt data.  
 > Built as a technical assignment for the Junior AI Engineer position at DarGlobal.
 
-**Live Demo:** `https://estateiq-frontend-ji7y.onrender.com` _(frontend deploying)_  
+**Live Demo:** `https://estateiq-frontend-2qfo.onrender.com`  
 **Backend API:** `https://estateiq-backend-ji7y.onrender.com`  
 **API Docs:** `https://estateiq-backend-ji7y.onrender.com/docs`  
+**GitHub:** `https://github.com/hardikmishra0910/Real-Estate-Ai-Chat-bot`
 **GitHub:** `https://github.com/hardikmishra0910/Real-Estate-Ai-Chat-bot`
 
 ---

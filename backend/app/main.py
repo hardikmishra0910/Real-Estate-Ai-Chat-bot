@@ -68,6 +68,7 @@ allowed_origins = [
     settings.frontend_url,
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://estateiq-frontend-2qfo.onrender.com",
 ]
 prod_url = os.getenv("PRODUCTION_FRONTEND_URL", "")
 if prod_url:
