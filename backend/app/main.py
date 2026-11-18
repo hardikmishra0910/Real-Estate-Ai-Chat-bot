@@ -1,6 +1,7 @@
-"""EstateIQ FastAPI application entry point."""
+"""EstateIQ FastAPI application — production-safe startup."""
 
 import os
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,80 +11,67 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.logging import setup_logging, get_logger
-from app.api import health, chat, stats, sources, scrape
 
-# Boot logging immediately
 setup_logging()
 logger = get_logger(__name__)
 settings = get_settings()
 
 
+def _background_ingest():
+    """Run ingestion in a background thread so the port binds immediately."""
+    try:
+        from app.rag.vectorstore import get_collection_stats
+        stats = get_collection_stats(settings.chroma_persist_dir)
+        total = sum(stats.values())
+        if total > 0:
+            logger.info(f"ChromaDB already has {total} chunks — skipping ingestion.")
+            return
+        logger.info("Starting background ingestion...")
+        from app.services.ingestion_service import run_ingestion
+        result = run_ingestion(sources=["darglobal", "wasalt"], force_refresh=False)
+        logger.info(
+            f"Background ingestion complete: "
+            f"{result['total_documents']} docs, {result['indexed_chunks']} chunks"
+        )
+    except Exception as e:
+        logger.error(f"Background ingestion failed: {e}", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: initialise ChromaDB and optionally auto-ingest data."""
-    logger.info("╔══════════════════════════════════╗")
-    logger.info("║     EstateIQ Backend Starting    ║")
-    logger.info("╚══════════════════════════════════╝")
-    logger.info(f"Environment : {settings.environment}")
-    logger.info(f"Embedding   : {settings.embedding_model}")
-    logger.info(f"Model       : {settings.openrouter_model}")
-    logger.info(f"ChromaDB    : {settings.chroma_persist_dir}")
+    logger.info("EstateIQ Backend starting — binding port immediately")
 
-    # Ensure data directories exist
+    # Ensure directories exist
     Path(settings.chroma_persist_dir).mkdir(parents=True, exist_ok=True)
     Path("./data/raw").mkdir(parents=True, exist_ok=True)
     Path("./data/processed").mkdir(parents=True, exist_ok=True)
 
-    # Auto-ingest if no data exists yet
-    from app.rag.vectorstore import get_collection_stats
-    stats_data = get_collection_stats(settings.chroma_persist_dir)
-    total_chunks = sum(stats_data.values())
-
-    if total_chunks == 0:
-        logger.info("No data indexed. Running initial ingestion...")
-        try:
-            from app.services.ingestion_service import run_ingestion
-            result = run_ingestion(sources=["darglobal", "wasalt"], force_refresh=True)
-            logger.info(
-                f"Ingestion complete: {result['total_documents']} docs, "
-                f"{result['indexed_chunks']} chunks"
-            )
-        except Exception as e:
-            logger.error(f"Auto-ingestion failed: {e}", exc_info=True)
-            logger.warning("Server will start without data. Use POST /api/scrape to ingest.")
-    else:
-        logger.info(f"ChromaDB ready: {total_chunks} chunks already indexed.")
+    # Start ingestion in background — port binds first
+    t = threading.Thread(target=_background_ingest, daemon=True)
+    t.start()
 
     yield
-
     logger.info("EstateIQ Backend shutting down.")
 
 
-# ── App factory ───────────────────────────────────────────────────────────────
-
 app = FastAPI(
     title="EstateIQ API",
-    description=(
-        "AI-powered real estate intelligence assistant. "
-        "Answers questions grounded in DarGlobal and Wasalt data."
-    ),
+    description="AI real estate assistant grounded in DarGlobal and Wasalt data.",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
-
+# CORS
 allowed_origins = [
     settings.frontend_url,
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
-
-# Allow production domains when set
-if os.getenv("PRODUCTION_FRONTEND_URL"):
-    allowed_origins.append(os.getenv("PRODUCTION_FRONTEND_URL"))
+prod_url = os.getenv("PRODUCTION_FRONTEND_URL", "")
+if prod_url:
+    allowed_origins.append(prod_url)
 
 app.add_middleware(
     CORSMiddleware,
@@ -93,7 +81,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Global error handler ──────────────────────────────────────────────────────
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -103,8 +90,8 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "An unexpected error occurred. Please try again."},
     )
 
-# ── Routers ───────────────────────────────────────────────────────────────────
 
+from app.api import health, chat, stats, sources, scrape  # noqa: E402
 app.include_router(health.router)
 app.include_router(chat.router)
 app.include_router(stats.router)
@@ -114,9 +101,4 @@ app.include_router(scrape.router)
 
 @app.get("/", tags=["System"])
 async def root():
-    return {
-        "name": "EstateIQ API",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/health",
-    }
+    return {"name": "EstateIQ API", "version": "1.0.0", "docs": "/docs", "health": "/health"}

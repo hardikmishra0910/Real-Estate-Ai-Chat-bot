@@ -37,10 +37,10 @@ class Settings(BaseSettings):
     max_pages_per_site: int = 50
 
     # RAG
-    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: str = "onnx-mini-lm-l6-v2"
     chunk_size: int = 800
     chunk_overlap: int = 100
-    top_k_results: int = 5
+    top_k_results: int = 8
 
 
 @lru_cache()

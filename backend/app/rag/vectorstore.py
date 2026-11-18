@@ -1,10 +1,10 @@
-"""ChromaDB vector store management — compatible with chromadb >= 1.0."""
+"""ChromaDB vector store management — memory-efficient, compatible with chromadb >= 0.4."""
 
 import chromadb
 from pathlib import Path
 from typing import Optional
 
-from app.rag.embeddings import embed_texts
+from app.rag.embeddings import get_chroma_embedding_function
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -22,22 +22,13 @@ def get_chroma_client(persist_dir: str = "./data/chromadb") -> chromadb.Persiste
 
 
 def _collection_names(client: chromadb.PersistentClient) -> list[str]:
-    """Return collection names — handles both chromadb 0.x (str) and 1.x (Collection)."""
     cols = client.list_collections()
-    result = []
-    for c in cols:
-        if isinstance(c, str):
-            result.append(c)
-        else:
-            result.append(c.name)
-    return result
+    return [c if isinstance(c, str) else c.name for c in cols]
 
 
-def get_or_create_collection(
-    client: chromadb.PersistentClient,
-    name: str,
-) -> chromadb.Collection:
-    return client.get_or_create_collection(name=name)
+def get_or_create_collection(client: chromadb.PersistentClient, name: str):
+    ef = get_chroma_embedding_function()
+    return client.get_or_create_collection(name=name, embedding_function=ef)
 
 
 def index_chunks(
@@ -45,9 +36,8 @@ def index_chunks(
     collection_name: str,
     persist_dir: str = "./data/chromadb",
     embedding_model: str = "all-MiniLM-L6-v2",
-    batch_size: int = 64,
+    batch_size: int = 32,
 ) -> int:
-    """Embed and store chunks in ChromaDB. Returns number of chunks indexed."""
     if not chunks:
         logger.warning("No chunks to index.")
         return 0
@@ -55,15 +45,11 @@ def index_chunks(
     client = get_chroma_client(persist_dir)
     collection = get_or_create_collection(client, collection_name)
 
-    # Batch processing
     indexed = 0
     for i in range(0, len(chunks), batch_size):
-        batch = chunks[i : i + batch_size]
+        batch = chunks[i: i + batch_size]
         texts = [c["content"] for c in batch]
         ids = [c["chunk_id"] for c in batch]
-
-        embeddings = embed_texts(texts, embedding_model)
-
         metadatas = [
             {
                 "parent_id": c["parent_id"],
@@ -78,17 +64,12 @@ def index_chunks(
             }
             for c in batch
         ]
-
-        collection.upsert(
-            ids=ids,
-            embeddings=embeddings,
-            documents=texts,
-            metadatas=metadatas,
-        )
+        # ChromaDB will embed via the collection's embedding_function
+        collection.upsert(ids=ids, documents=texts, metadatas=metadatas)
         indexed += len(batch)
-        logger.info(f"Indexed batch {i//batch_size + 1}: {indexed}/{len(chunks)} chunks")
+        logger.info(f"Indexed batch {i // batch_size + 1}: {indexed}/{len(chunks)} chunks")
 
-    logger.info(f"Indexed {indexed} chunks into collection '{collection_name}'")
+    logger.info(f"Indexed {indexed} chunks into '{collection_name}'")
     return indexed
 
 
@@ -97,35 +78,27 @@ def semantic_search(
     collection_name: str,
     persist_dir: str = "./data/chromadb",
     embedding_model: str = "all-MiniLM-L6-v2",
-    top_k: int = 5,
+    top_k: int = 8,
     source_filter: Optional[str] = None,
 ) -> list[dict]:
-    """
-    Search the vector store for chunks relevant to the query.
-    source_filter: 'darglobal' | 'wasalt' | None (all)
-    """
     client = get_chroma_client(persist_dir)
 
-    # Check collection exists
-    existing = _collection_names(client)
-    if collection_name not in existing:
+    if collection_name not in _collection_names(client):
         logger.warning(f"Collection '{collection_name}' does not exist.")
         return []
 
-    collection = client.get_collection(collection_name)
+    ef = get_chroma_embedding_function()
+    collection = client.get_collection(collection_name, embedding_function=ef)
 
-    if collection.count() == 0:
+    count = collection.count()
+    if count == 0:
         return []
 
-    query_embedding = embed_texts([query], embedding_model)[0]
-
-    where_filter = None
-    if source_filter and source_filter != "all":
-        where_filter = {"source": {"$eq": source_filter}}
+    where_filter = {"source": {"$eq": source_filter}} if source_filter else None
 
     results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=min(top_k, collection.count()),
+        query_texts=[query],
+        n_results=min(top_k, count),
         where=where_filter,
         include=["documents", "metadatas", "distances"],
     )
@@ -137,8 +110,7 @@ def semantic_search(
             results["metadatas"][0],
             results["distances"][0],
         ):
-            # Convert cosine distance to similarity score (0-1)
-            score = max(0.0, 1.0 - distance)
+            score = max(0.0, 1.0 - float(distance))
             hits.append({
                 "content": doc,
                 "source": meta.get("source", ""),
@@ -148,7 +120,6 @@ def semantic_search(
                 "location": meta.get("location", ""),
                 "relevance_score": round(score, 4),
             })
-
     return hits
 
 
@@ -156,15 +127,14 @@ def get_collection_stats(
     persist_dir: str = "./data/chromadb",
     collection_names: Optional[list[str]] = None,
 ) -> dict:
-    """Return stats about indexed collections."""
     client = get_chroma_client(persist_dir)
     existing = _collection_names(client)
-
-    stats = {}
     names = collection_names or existing
+    stats = {}
     for name in names:
         if name in existing:
-            col = client.get_collection(name)
+            ef = get_chroma_embedding_function()
+            col = client.get_collection(name, embedding_function=ef)
             stats[name] = col.count()
         else:
             stats[name] = 0

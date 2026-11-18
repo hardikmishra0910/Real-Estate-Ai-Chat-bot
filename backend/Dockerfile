@@ -8,15 +8,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Pre-download the embedding model at build time (avoids cold start delay)
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+# Pre-download the ONNX embedding model at build time (small, ~25MB)
+# This avoids the download at first request on the free tier
+RUN python -c "\
+from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; \
+ef = ONNXMiniLM_L6_V2(); \
+ef(['warmup']); \
+print('Embedding model ready')"
 
 COPY app/ ./app/
-
 RUN mkdir -p ./data/raw ./data/processed ./data/chromadb
 
 EXPOSE 8000
