@@ -14,7 +14,7 @@ cd estateiq
 git init
 git add .
 git commit -m "feat: initial EstateIQ implementation"
-git remote add origin https://github.com/YOUR_USERNAME/estateiq.git
+git remote add origin https://github.com/hardikmishra0910/Real-Estate-Ai-Chat-bot.git
 git push -u origin main
 ```
 

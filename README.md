@@ -4,7 +4,7 @@
 > Built as a technical assignment for the Junior AI Engineer position at DarGlobal.
 
 **Live Demo:** `https://estateiq-frontend.onrender.com` _(update after deployment)_  
-**GitHub:** `https://github.com/your-username/estateiq` _(update after push)_
+**GitHub:** `https://github.com/hardikmishra0910/Real-Estate-Ai-Chat-bot`
 
 ---
 
