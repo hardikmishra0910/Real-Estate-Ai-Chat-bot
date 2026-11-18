@@ -1,0 +1,54 @@
+services:
+  # ── Backend ───────────────────────────────────────────────────────────────
+  - type: web
+    name: estateiq-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false          # set manually in Render dashboard
+      - key: OPENROUTER_MODEL
+        value: google/gemma-3-4b-it
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: ENVIRONMENT
+        value: production
+      - key: CHROMA_PERSIST_DIR
+        value: /app/data/chromadb
+      - key: FRONTEND_URL
+        value: https://estateiq-frontend.onrender.com   # update after deploy
+      - key: EMBEDDING_MODEL
+        value: all-MiniLM-L6-v2
+      - key: TOP_K_RESULTS
+        value: "8"
+      - key: CHUNK_SIZE
+        value: "800"
+      - key: CHUNK_OVERLAP
+        value: "100"
+      - key: SCRAPE_DELAY_SECONDS
+        value: "2"
+      - key: MAX_PAGES_PER_SITE
+        value: "50"
+    disk:
+      name: estateiq-data
+      mountPath: /app/data
+      sizeGB: 1
+    healthCheckPath: /health
+
+  # ── Frontend ──────────────────────────────────────────────────────────────
+  - type: web
+    name: estateiq-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: free
+    buildArgs:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://estateiq-backend.onrender.com   # update after backend deploys
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://estateiq-backend.onrender.com
+      - key: NODE_ENV
+        value: production
