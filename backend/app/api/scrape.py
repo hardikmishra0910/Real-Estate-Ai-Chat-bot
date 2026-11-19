@@ -36,41 +36,34 @@ async def trigger_scrape(request: ScrapeRequest):
 
 @router.get("/api/index", tags=["Data"])
 async def trigger_index_get():
-    """GET endpoint — open in browser to trigger full re-index."""
+    """Trigger indexing — returns immediately, runs in background thread."""
     global _scrape_running
     if _scrape_running:
-        return JSONResponse({"status": "already_running"})
+        return JSONResponse({"status": "already_running", "message": "Check /api/stats for progress."})
 
-    _scrape_running = True
-    try:
-        logger.info("=== /api/index triggered ===")
+    def _run():
+        global _scrape_running
+        _scrape_running = True
+        try:
+            logger.info("=== Background index started ===")
+            from app.rag.embeddings import get_chroma_embedding_function
+            ef = get_chroma_embedding_function()
+            test = ef(["test"])
+            logger.info(f"Embedding OK dim={len(test[0])}")
 
-        # Step 1: test embedding
-        logger.info("Step 1: Testing embedding...")
-        from app.rag.embeddings import get_chroma_embedding_function
-        ef = get_chroma_embedding_function()
-        test = ef(["DarGlobal real estate"])
-        dim = len(test[0])
-        logger.info(f"Embedding OK — dim={dim}")
+            from app.services.ingestion_service import run_ingestion
+            stats = run_ingestion(sources=["darglobal", "wasalt"], force_refresh=True)
+            logger.info(f"=== Index complete: {stats.get('indexed_chunks', 0)} chunks ===")
+        except Exception as e:
+            logger.error(f"Index failed: {e}\n{traceback.format_exc()}")
+        finally:
+            _scrape_running = False
 
-        # Step 2: run ingestion
-        logger.info("Step 2: Running ingestion...")
-        from app.services.ingestion_service import run_ingestion
-        stats = run_ingestion(sources=["darglobal", "wasalt"], force_refresh=True)
-        logger.info(f"Ingestion result: {stats}")
+    import threading
+    threading.Thread(target=_run, daemon=True).start()
 
-        return JSONResponse({
-            "status": "complete",
-            "total_documents": stats["total_documents"],
-            "total_chunks": stats["total_chunks"],
-            "indexed_chunks": stats["indexed_chunks"],
-            "chromadb_verified": stats.get("chromadb_verified", 0),
-            "embedding_dim": dim,
-            "message": "Data indexed successfully. Chat is ready.",
-        })
-    except Exception as e:
-        tb = traceback.format_exc()
-        logger.error(f"Index failed:\n{tb}")
-        return JSONResponse({"status": "error", "message": str(e), "traceback": tb}, status_code=500)
-    finally:
-        _scrape_running = False
+    return JSONResponse({
+        "status": "started",
+        "message": "Indexing started in background. Check /api/stats in 3 minutes to see chunks > 0.",
+        "stats_url": "https://estateiq-backend-ji7y.onrender.com/api/stats"
+    })
