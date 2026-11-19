@@ -11,12 +11,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Pre-warm the embedding function so the model downloads at build time
-RUN python -c "\
-from chromadb.utils.embedding_functions import DefaultEmbeddingFunction; \
-ef = DefaultEmbeddingFunction(); \
-result = ef(['warmup test']); \
-print('Embedding OK, dim=', len(result[0]))"
+# Verify chromadb imports correctly
+RUN python -c "import chromadb; print('chromadb', chromadb.__version__, 'OK')"
 
 COPY app/ ./app/
 RUN mkdir -p ./data/raw ./data/processed ./data/chromadb

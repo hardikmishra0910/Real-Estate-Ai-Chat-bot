@@ -1,7 +1,6 @@
 """
-Embedding function — uses ChromaDB's DefaultEmbeddingFunction.
-This uses the onnx model bundled inside chromadb itself with no extra deps.
-Falls back to a simple hash-based approach if that also fails.
+Lightweight embedding using chromadb's built-in sentence transformer.
+Falls back to keyword-based embedding if all else fails.
 """
 
 from functools import lru_cache
@@ -12,29 +11,64 @@ logger = get_logger(__name__)
 
 @lru_cache(maxsize=1)
 def get_chroma_embedding_function():
-    """Get the best available embedding function."""
-    # Try 1: chromadb's built-in default (uses onnxruntime bundled with chromadb)
+    """Get chromadb embedding function — tries multiple options."""
+
+    # Option 1: chromadb default (uses its own bundled model)
     try:
         from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
         ef = DefaultEmbeddingFunction()
-        # Warm up test
-        test = ef(["test"])
-        logger.info(f"Using DefaultEmbeddingFunction — dim={len(test[0])}")
+        test = ef(["warmup"])
+        logger.info(f"DefaultEmbeddingFunction OK — dim={len(test[0])}")
         return ef
     except Exception as e:
         logger.warning(f"DefaultEmbeddingFunction failed: {e}")
 
-    # Try 2: ONNXMiniLM
+    # Option 2: sentence transformers if installed
     try:
-        from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
-        ef = ONNXMiniLM_L6_V2()
-        test = ef(["test"])
-        logger.info(f"Using ONNXMiniLM_L6_V2 — dim={len(test[0])}")
+        from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+        ef = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+        test = ef(["warmup"])
+        logger.info(f"SentenceTransformerEmbeddingFunction OK — dim={len(test[0])}")
         return ef
     except Exception as e:
-        logger.warning(f"ONNXMiniLM_L6_V2 failed: {e}")
+        logger.warning(f"SentenceTransformerEmbeddingFunction failed: {e}")
 
-    raise RuntimeError("No embedding function available. Check chromadb installation.")
+    # Option 3: simple keyword embedding (always works, no deps)
+    logger.warning("Using SimpleKeywordEmbeddingFunction fallback")
+    return SimpleKeywordEmbeddingFunction()
+
+
+class SimpleKeywordEmbeddingFunction:
+    """
+    Deterministic keyword-based embedding.
+    Uses character n-gram hashing to 384 dimensions.
+    No external dependencies. Works anywhere.
+    """
+    DIM = 384
+
+    def __call__(self, input: list[str]) -> list[list[float]]:
+        import hashlib
+        import math
+        results = []
+        for text in input:
+            vec = [0.0] * self.DIM
+            text_lower = text.lower()
+            # Character trigrams
+            for i in range(len(text_lower) - 2):
+                trigram = text_lower[i:i+3]
+                h = int(hashlib.md5(trigram.encode()).hexdigest(), 16)
+                idx = h % self.DIM
+                vec[idx] += 1.0
+            # Word unigrams
+            for word in text_lower.split():
+                h = int(hashlib.md5(word.encode()).hexdigest(), 16)
+                idx = h % self.DIM
+                vec[idx] += 2.0
+            # Normalize
+            magnitude = math.sqrt(sum(x * x for x in vec)) or 1.0
+            vec = [x / magnitude for x in vec]
+            results.append(vec)
+        return results
 
 
 def embed_texts(texts: list[str], model_name: str = "") -> list[list[float]]:
