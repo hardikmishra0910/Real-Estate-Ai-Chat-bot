@@ -20,9 +20,12 @@ PROCESSED_DATA_DIR = Path("./data/processed")
 
 
 def run_ingestion(
-    sources: list[str] = ("darglobal", "wasalt"),
+    sources=None,
     force_refresh: bool = False,
 ) -> dict:
+    if sources is None:
+        sources = ["darglobal", "wasalt"]
+    sources = list(sources)  # ensure it's a plain list, never a tuple or string
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
     PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -58,7 +61,6 @@ def run_ingestion(
             scrape_stats[source] = {
                 "documents": len(docs),
                 "source": "live",
-                "scraper_stats": scraper.stats,
             }
 
         all_documents.extend(docs)
