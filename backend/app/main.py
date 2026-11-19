@@ -24,15 +24,14 @@ def _background_ingest():
     try:
         from app.rag.vectorstore import get_collection_stats
         stats = get_collection_stats(settings.chroma_persist_dir)
-        if sum(stats.values()) > 0:
-            logger.info(f"ChromaDB already has data — skipping auto-ingest.")
+        total = sum(stats.values())
+        if total > 0:
+            logger.info(f"ChromaDB has {total} chunks — no auto-ingest needed.")
             return
-        logger.info("Auto-ingesting data in background...")
-        from app.services.ingestion_service import run_ingestion
-        result = run_ingestion(sources=["darglobal", "wasalt"], force_refresh=False)
-        logger.info(f"Auto-ingest done: {result.get('indexed_chunks', 0)} chunks")
+        # Data was pre-indexed in Docker image — if empty, something went wrong
+        logger.warning("ChromaDB is empty after startup — data may not have been pre-indexed in Docker build.")
     except Exception as e:
-        logger.error(f"Auto-ingest error: {e}\n{traceback.format_exc()}")
+        logger.error(f"Startup check error: {e}")
 
 
 @asynccontextmanager
