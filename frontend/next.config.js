@@ -6,10 +6,15 @@ const nextConfig = {
   },
   transpilePackages: ['lucide-react'],
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+    // Baked at build time — works in both Docker and Node runtime
+    NEXT_PUBLIC_API_URL:
+      process.env.NEXT_PUBLIC_API_URL ||
+      'https://estateiq-backend-ji7y.onrender.com',
   },
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL ||
+      'https://estateiq-backend-ji7y.onrender.com'
     return [
       {
         source: '/api/:path*',

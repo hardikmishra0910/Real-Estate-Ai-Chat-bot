@@ -7,12 +7,14 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Ensure public dir exists (required by Next.js standalone build)
 RUN mkdir -p ./public
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Bake the backend URL into the build
+ARG NEXT_PUBLIC_API_URL=https://estateiq-backend-ji7y.onrender.com
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+
+RUN echo "Building with API URL: $NEXT_PUBLIC_API_URL" && npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
