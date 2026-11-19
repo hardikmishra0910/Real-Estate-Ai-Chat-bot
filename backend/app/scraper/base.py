@@ -84,7 +84,7 @@ class BaseScraper(ABC):
         resp = self._get(url)
         if resp is None:
             return None
-        return BeautifulSoup(resp.text, "lxml")
+        return BeautifulSoup(resp.text, "html.parser")
 
     @staticmethod
     def clean_text(text: str) -> str:
