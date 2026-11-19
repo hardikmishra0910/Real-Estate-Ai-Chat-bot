@@ -19,6 +19,8 @@ settings = get_settings()
 
 def _background_ingest():
     """Run ingestion in a background thread so the port binds immediately."""
+    import time
+    time.sleep(5)  # Let the server fully start first
     try:
         from app.rag.vectorstore import get_collection_stats
         stats = get_collection_stats(settings.chroma_persist_dir)

@@ -11,19 +11,17 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Pre-download the ONNX embedding model at build time (small, ~25MB)
-# This avoids the download at first request on the free tier
+# Pre-warm the embedding function so the model downloads at build time
 RUN python -c "\
-from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2; \
-ef = ONNXMiniLM_L6_V2(); \
-ef(['warmup']); \
-print('Embedding model ready')"
+from chromadb.utils.embedding_functions import DefaultEmbeddingFunction; \
+ef = DefaultEmbeddingFunction(); \
+result = ef(['warmup test']); \
+print('Embedding OK, dim=', len(result[0]))"
 
 COPY app/ ./app/
 RUN mkdir -p ./data/raw ./data/processed ./data/chromadb
 
 EXPOSE 8000
-
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 

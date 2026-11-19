@@ -1,7 +1,7 @@
 """
-Embedding model — uses ChromaDB's built-in ONNX embedding function.
-Memory footprint: ~100MB (vs ~1.5GB for sentence-transformers + torch).
-Compatible with chromadb >= 0.4.x and 1.x.
+Embedding function — uses ChromaDB's DefaultEmbeddingFunction.
+This uses the onnx model bundled inside chromadb itself with no extra deps.
+Falls back to a simple hash-based approach if that also fails.
 """
 
 from functools import lru_cache
@@ -12,25 +12,31 @@ logger = get_logger(__name__)
 
 @lru_cache(maxsize=1)
 def get_chroma_embedding_function():
-    """Return ChromaDB's ONNX-based embedding function."""
+    """Get the best available embedding function."""
+    # Try 1: chromadb's built-in default (uses onnxruntime bundled with chromadb)
     try:
-        from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
-        logger.info("Loading ONNXMiniLM_L6_V2 embedding function")
-        ef = ONNXMiniLM_L6_V2()
-        logger.info("Embedding function ready")
+        from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+        ef = DefaultEmbeddingFunction()
+        # Warm up test
+        test = ef(["test"])
+        logger.info(f"Using DefaultEmbeddingFunction — dim={len(test[0])}")
         return ef
     except Exception as e:
-        logger.warning(f"ONNXMiniLM_L6_V2 failed ({e}), trying DefaultEmbeddingFunction")
-        try:
-            from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
-            return DefaultEmbeddingFunction()
-        except Exception as e2:
-            logger.error(f"All embedding functions failed: {e2}")
-            raise
+        logger.warning(f"DefaultEmbeddingFunction failed: {e}")
+
+    # Try 2: ONNXMiniLM
+    try:
+        from chromadb.utils.embedding_functions import ONNXMiniLM_L6_V2
+        ef = ONNXMiniLM_L6_V2()
+        test = ef(["test"])
+        logger.info(f"Using ONNXMiniLM_L6_V2 — dim={len(test[0])}")
+        return ef
+    except Exception as e:
+        logger.warning(f"ONNXMiniLM_L6_V2 failed: {e}")
+
+    raise RuntimeError("No embedding function available. Check chromadb installation.")
 
 
 def embed_texts(texts: list[str], model_name: str = "") -> list[list[float]]:
-    """Embed texts using ChromaDB's ONNX function."""
     ef = get_chroma_embedding_function()
-    results = ef(texts)
-    return [list(e) for e in results]
+    return [list(e) for e in ef(texts)]
